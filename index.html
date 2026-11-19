@@ -2,129 +2,74 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>EXECUTIVE SHIELD 3D</title>
-  <link href="https://googleapis.com" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Executive Shield 3D</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cloudflare.com"></script>
 </head>
 <body>
-  <div id="rotate-warning">
-    <div class="rotate-box">
-      <div class="phone-icon">📱↻</div>
-      <h2 id="txt-rotate">GIRA TU IPHONE EN HORIZONTAL</h2>
-    </div>
-  </div>
+  <canvas id="game-canvas"></canvas>
 
-  <canvas id="bg-canvas"></canvas>
-
-  <header class="top-bar">
-    <div class="brand">
-      <span class="badge-live" id="state-badge">● PORTADA EN VIVO</span>
-      <h1>EXECUTIVE SHIELD</h1>
-    </div>
-    <div class="top-controls">
-      <div class="rank-pill"><span id="rank-display">LVL 1 • 0 XP</span></div>
-      <button id="btn-switch-menu" class="icon-btn hidden">🎛️ MENÚ</button>
-      <select id="lang-select">
-        <option value="es">🇪🇸 ES</option>
-        <option value="en">🇺🇸 EN</option>
-        <option value="ru">🇷🇺 RU</option>
-        <option value="pt">🇧🇷 PT</option>
-        <option value="fr">🇫🇷 FR</option>
-        <option value="zh">🇨🇳 ZH</option>
-      </select>
-    </div>
-  </header>
-
-  <section id="cover-screen" class="cover-screen">
-    <div class="cover-bottom">
-      <div class="cover-title-box">
-        <span class="cover-tag">UNITED STATES SECRET SERVICE • FSO • CSB</span>
-        <h2 id="cover-title">PROTECCIÓN PRESIDENCIAL</h2>
-        <p id="cover-sub">Arrastra el dedo para girar alrededor de los agentes, La Bestia y Marine One</p>
+  <div id="hud">
+    <header class="top-bar">
+      <div class="brand">
+        <span class="live-dot" id="badge-status">PORTADA EN VIVO</span>
+        <h1>EXECUTIVE SHIELD</h1>
       </div>
-      <button id="btn-enter-hub" class="deploy-btn big-cta">ENTRAR EN SERVICIO ▶</button>
-    </div>
-  </section>
-
-  <main class="main-hud hidden" id="hub-ui">
-    <section class="panel">
-      <div class="section-tag" id="txt-select-agency">1. AGENCIA Y MANDATARIO</div>
-      <div class="country-tabs">
-        <button class="country-btn active" data-country="usa">🇺🇸 USA</button>
-        <button class="country-btn" data-country="rus">🇷🇺 RUS</button>
-        <button class="country-btn" data-country="chn">🇨🇳 CHN</button>
+      <div class="top-controls">
+        <span class="xp-pill" id="xp-display">LVL 1 • 0 XP</span>
+        <select id="lang-select" aria-label="Idioma">
+          <option value="es">🇪🇸 ES</option>
+          <option value="en">🇺🇸 EN</option>
+          <option value="ru">🇷🇺 RU</option>
+          <option value="pt">🇧🇷 PT</option>
+          <option value="fr">🇫🇷 FR</option>
+          <option value="zh">🇨🇳 ZH</option>
+        </select>
       </div>
-      <div class="leader-selector" id="leader-selector"></div>
-      <div class="dossier-card">
-        <div class="dossier-header">
-          <div>
-            <span class="codename" id="leader-codename">CODENAME: MOGUL</span>
-            <h2 id="leader-name">DONALD J. TRUMP</h2>
-          </div>
-          <div class="flag-stamp" id="country-stamp">USA</div>
-        </div>
-        <div class="fleet-grid">
-          <div class="fleet-item"><small id="lbl-limo">LIMUSINA</small><strong id="fleet-car">LA BESTIA</strong></div>
-          <div class="fleet-item"><small id="lbl-heli">HELICÓPTERO</small><strong id="fleet-heli">MARINE ONE</strong></div>
-          <div class="fleet-item"><small id="lbl-plane">AVIÓN VIP</small><strong id="fleet-plane">AIR FORCE ONE</strong></div>
-        </div>
+    </header>
+
+    <section id="cover-panel" class="panel">
+      <p class="agency-tag" id="agency-label">UNITED STATES SECRET SERVICE • USSS</p>
+      <div class="leader-grid" id="leader-buttons"></div>
+      <div class="mode-row">
+        <button class="btn primary" id="btn-foot">🛡️ Escolta</button>
+        <button class="btn" id="btn-drive">🚘 Convoy</button>
+        <button class="btn" id="btn-heli">🚁 Helicóptero</button>
+        <button class="btn" id="btn-fly">✈️ Avión VIP</button>
       </div>
     </section>
 
-    <section class="panel">
-      <div class="section-tag" id="txt-select-mode">2. OPERACIONES</div>
-      <div class="division-tabs">
-        <button class="div-btn active" data-div="convoy" id="tab-convoy">🚘 CONVOY</button>
-        <button class="div-btn" data-div="foot" id="tab-foot">🛡️ A PIE</button>
-        <button class="div-btn" data-div="air" id="tab-air">✈️ AÉREO</button>
-        <button class="div-btn infinite-tab" data-div="infinite" id="tab-infinite">♾️ ALERTA</button>
+    <section id="mission-hud" class="hidden">
+      <div class="mission-box">
+        <div class="mission-meta">
+          <span id="mission-type-tag" class="tag">RUTINA</span>
+          <span id="vip-health">VIP: 100%</span>
+        </div>
+        <h2 id="mission-title">Traslado Diplomático</h2>
+        <p id="mission-desc">Mantén el perímetro seguro.</p>
+        <div class="mission-actions">
+          <button class="btn small" id="btn-switch-gta">🔄 Cambiar Líder</button>
+          <button class="btn small hidden" id="btn-gyro">📱 Activar Inclinación</button>
+          <button class="btn small danger" id="btn-exit">✖ Portada</button>
+        </div>
       </div>
-      <div class="mission-list" id="mission-list"></div>
-      <div class="launch-footer">
-        <button id="btn-back-cover" class="secondary-btn">◀ PORTADA</button>
-        <button id="btn-deploy" class="deploy-btn">INICIAR OPERACIÓN ▶</button>
+
+      <div id="joystick-zone">
+        <div id="joystick-stick"></div>
       </div>
     </section>
-  </main>
 
-  <div id="gameplay-hud" class="gameplay-hud hidden">
-    <div class="mission-tracker">
-      <div class="vip-health-box">
-        <span class="vip-label" id="hud-vip-name">VIP: DONALD J. TRUMP</span>
-        <div class="vip-bar-bg"><div class="vip-bar-fill" id="vip-integrity" style="width:100%"></div></div>
-      </div>
-      <div class="objective-box">
-        <span class="obj-tag" id="hud-mode-tag">OPERACIÓN</span>
-        <strong id="hud-objective-text">Protege el convoy presidencial</strong>
-      </div>
-      <div class="distance-box">
-        <small id="lbl-meta">META</small>
-        <strong id="hud-distance">500m</strong>
-      </div>
-    </div>
-
-    <div id="gta-toast" class="gta-toast hidden">
-      <span class="toast-sub" id="toast-sub">MISIÓN SUPERADA</span>
-      <h2 id="toast-title">+250 XP</h2>
-      <button id="btn-accept-next" class="accept-radio-btn hidden">ACEPTAR SIGUIENTE MISIÓN ▶</button>
-    </div>
-
-    <div class="touch-controls">
-      <div class="steer-group">
-        <button id="btn-left" class="ctrl-btn">◀</button>
-        <button id="btn-right" class="ctrl-btn">▶</button>
-      </div>
-      <div class="action-group">
-        <button id="btn-siren" class="ctrl-btn siren-btn">🚨 SIRENA</button>
-        <button id="btn-boost" class="ctrl-btn boost-btn">⚡ TURBO</button>
+    <div id="decision-modal" class="modal hidden">
+      <div class="modal-card">
+        <span class="alert-badge" id="alert-title">⚠️ ALERTA DE SEGURIDAD</span>
+        <p id="alert-text"></p>
+        <div id="decision-options" class="decision-list"></div>
       </div>
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="data.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
-
