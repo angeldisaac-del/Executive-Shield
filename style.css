@@ -1,1 +1,84 @@
+:root {
+  --bg-dark: #06080f;
+  --panel-bg: rgba(10, 14, 24, 0.84);
+  --border-glow: rgba(255, 255, 255, 0.16);
+  --accent: #ffb703;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-dark); color: #fff; font-family: 'Rajdhani', sans-serif; }
+#bg-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; }
+.hidden { display: none !important; }
+
+#rotate-warning { display: none; position: fixed; inset: 0; z-index: 9999; background: #05070c; align-items: center; justify-content: center; text-align: center; }
+@media (orientation: portrait) { #rotate-warning { display: flex; } }
+.rotate-box .phone-icon { font-size: 3rem; margin-bottom: 8px; }
+.rotate-box h2 { font-family: 'Anton', sans-serif; color: var(--accent); letter-spacing: 2px; }
+
+.top-bar { position: relative; z-index: 20; height: 44px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; background: rgba(5, 7, 13, 0.85); border-bottom: 1px solid var(--border-glow); }
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand h1 { font-family: 'Anton', sans-serif; font-size: 1.25rem; letter-spacing: 2px; }
+.badge-live { background: rgba(16, 185, 129, 0.22); border: 1px solid #10b981; color: #6ee7b7; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.badge-live.alert { background: rgba(230, 57, 70, 0.25); border-color: #e63946; color: #ff6b6b; }
+.top-controls { display: flex; align-items: center; gap: 8px; }
+.rank-pill { background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-glow); padding: 3px 8px; border-radius: 5px; font-size: 0.75rem; font-weight: 700; color: var(--accent); }
+#lang-select, .icon-btn, .secondary-btn { background: #101626; color: #fff; border: 1px solid var(--border-glow); border-radius: 5px; padding: 4px 8px; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.8rem; cursor: pointer; }
+
+.cover-screen { position: relative; z-index: 10; height: calc(100vh - 44px); display: flex; flex-direction: column; justify-content: flex-end; padding: 18px 24px; pointer-events: none; background: linear-gradient(0deg, rgba(5,7,13,0.9) 0%, rgba(5,7,13,0.12) 45%, transparent 100%); }
+.cover-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.cover-tag { color: var(--accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 2px; }
+.cover-title-box h2 { font-family: 'Anton', sans-serif; font-size: 2.1rem; letter-spacing: 2px; line-height: 1.05; text-shadow: 0 4px 18px rgba(0,0,0,0.9); }
+.cover-title-box p { font-size: 0.85rem; color: #cbd5e1; margin-top: 4px; }
+.big-cta { pointer-events: auto; padding: 12px 24px !important; font-size: 1.1rem !important; }
+
+.main-hud { position: relative; z-index: 10; height: calc(100vh - 44px); padding: 10px 14px; display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; }
+.panel { background: var(--panel-bg); backdrop-filter: blur(8px); border: 1px solid var(--border-glow); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+.section-tag { font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px; color: var(--accent); margin-bottom: 5px; }
+.country-tabs, .division-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 6px; }
+.division-tabs { grid-template-columns: repeat(4, 1fr); }
+.country-btn, .div-btn { background: rgba(255,255,255,0.06); border: 1px solid var(--border-glow); color: #9aa5b4; padding: 5px 4px; border-radius: 5px; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.75rem; cursor: pointer; }
+.country-btn.active, .div-btn.active { background: rgba(255, 183, 3, 0.24); border-color: var(--accent); color: #fff; }
+.leader-selector { display: flex; gap: 5px; margin-bottom: 6px; }
+.leader-chip { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glow); color: #cbd5e1; padding: 4px; border-radius: 5px; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+.leader-chip.active { background: var(--accent); color: #06080f; }
+.dossier-card { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.dossier-header { display: flex; justify-content: space-between; align-items: center; }
+.codename { font-size: 0.65rem; color: var(--accent); font-weight: 700; }
+.dossier-header h2 { font-family: 'Anton', sans-serif; font-size: 1.15rem; }
+.flag-stamp { font-family: 'Anton', sans-serif; padding: 2px 7px; border: 2px solid rgba(255,255,255,0.25); border-radius: 4px; }
+.fleet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.fleet-item { background: rgba(255,255,255,0.05); padding: 5px; border-radius: 4px; border-left: 2px solid var(--accent); }
+.fleet-item small { display: block; font-size: 0.58rem; color: #9aa5b4; }
+.fleet-item strong { font-size: 0.72rem; }
+.mission-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.mission-item { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.mission-item.selected { background: rgba(255, 183, 3, 0.18); border-color: var(--accent); }
+.mission-info h4 { font-size: 0.82rem; }
+.mission-info p { font-size: 0.7rem; color: #9aa5b4; }
+.mission-tag { font-size: 0.62rem; font-weight: 700; padding: 2px 5px; border-radius: 4px; background: rgba(58,134,255,0.2); color: #7cc0ff; }
+.tag-hollywood { background: rgba(230,57,70,0.25); color: #ff758f; }
+.launch-footer { margin-top: 6px; display: flex; justify-content: space-between; align-items: center; }
+.deploy-btn { background: linear-gradient(90deg, #ffb703, #fb8500); color: #06080f; border: none; border-radius: 6px; padding: 7px 14px; font-family: 'Anton', sans-serif; font-size: 0.92rem; letter-spacing: 1px; cursor: pointer; }
+
+.gameplay-hud { position: fixed; inset: 44px 0 0 0; z-index: 15; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 10px 14px 14px; }
+.mission-tracker { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.vip-health-box, .objective-box, .distance-box { background: rgba(8,12,22,0.85); border: 1px solid var(--border-glow); padding: 6px 10px; border-radius: 7px; }
+.vip-health-box { min-width: 170px; }
+.vip-label { font-size: 0.7rem; font-weight: 700; display: block; margin-bottom: 3px; }
+.vip-bar-bg { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; }
+.vip-bar-fill { height: 100%; background: #10b981; transition: width 0.2s; }
+.objective-box { flex: 1; text-align: center; border-color: rgba(255,183,3,0.5); }
+.obj-tag { display: block; font-size: 0.65rem; color: var(--accent); font-weight: 700; }
+.objective-box strong { font-size: 0.86rem; }
+.distance-box { text-align: right; min-width: 80px; }
+.distance-box small { display: block; font-size: 0.6rem; color: #9aa5b4; }
+.distance-box strong { font-family: 'Anton', sans-serif; font-size: 1.05rem; color: var(--accent); }
+.gta-toast { align-self: center; background: rgba(10,14,24,0.94); border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent); padding: 8px 22px; text-align: center; pointer-events: auto; }
+.toast-sub { font-size: 0.7rem; color: #6ee7b7; font-weight: 700; letter-spacing: 1.5px; }
+.gta-toast h2 { font-family: 'Anton', sans-serif; font-size: 1.35rem; color: var(--accent); }
+.accept-radio-btn { margin-top: 5px; background: var(--accent); color: #06080f; border: none; padding: 5px 12px; border-radius: 4px; font-family: 'Anton', sans-serif; cursor: pointer; }
+.touch-controls { display: flex; justify-content: space-between; align-items: flex-end; }
+.steer-group, .action-group { display: flex; gap: 10px; pointer-events: auto; }
+.ctrl-btn { width: 58px; height: 58px; border-radius: 50%; background: rgba(12,17,30,0.82); border: 2px solid rgba(255,255,255,0.28); color: #fff; font-size: 1.25rem; font-weight: 700; cursor: pointer; }
+.siren-btn, .boost-btn { width: auto; padding: 0 14px; border-radius: 28px; font-family: 'Anton', sans-serif; font-size: 0.85rem; }
+.boost-btn { border-color: var(--accent); color: var(--accent); }
 
