@@ -171,4 +171,6 @@ document.getElementById("btn-switch-menu").onclick = () => setScreen("HUB_MENU")
 document.getElementById("btn-deploy").onclick = () => { if (selectedMission) startMission(selectedMission); };
 document.getElementById("btn-accept-next").onclick = () => { if (GS.nextMission) startMission(GS.nextMission); };
 document.querySelectorAll(".country-btn").forEach((b) => (b.onclick = () => { document.querySelectorAll(".country-btn").forEach((x) => x.classList.remove("active")); b.classList.add("active"); GS.country = b.dataset.country; GS.leaderIdx = 0; renderFaction(); }));
+applyLang();
+animate();
 
