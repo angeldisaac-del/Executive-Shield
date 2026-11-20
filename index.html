@@ -2,74 +2,190 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Executive Shield 3D</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Executive Shield 3D — Secret Service Ops</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body { overflow: hidden; background: #070b14; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #fff; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+
+    #hud-top {
+      position: fixed; top: 8px; left: 8px; right: 8px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 6px;
+      pointer-events: none; z-index: 10;
+    }
+    .panel {
+      background: rgba(10, 16, 28, 0.86); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px;
+      padding: 7px 10px; pointer-events: auto;
+    }
+    .title { font-size: 12px; font-weight: 800; color: #38bdf8; }
+    .order-box { font-size: 11px; color: #f8fafc; margin-top: 3px; font-weight: 700; max-width: 310px; }
+    .radio { font-size: 10.5px; color: #fde047; margin-top: 3px; font-weight: 600; max-width: 310px; }
+
+    .bars { display: flex; gap: 8px; margin-top: 5px; }
+    .bar-col { flex: 1; }
+    .bar-lbl { font-size: 9.5px; font-weight: 700; color: #cbd5e1; margin-bottom: 2px; }
+    .bar-wrap { width: 100%; height: 6px; background: #1e293b; border-radius: 99px; overflow: hidden; }
+    #vip-bar { width: 100%; height: 100%; background: #22c55e; transition: width 0.2s; }
+    #agent-bar { width: 100%; height: 100%; background: #38bdf8; transition: width 0.2s; }
+
+    .right-stack { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; pointer-events: auto; }
+    .btn-group { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+    button {
+      background: rgba(30, 41, 59, 0.92); color: #f8fafc; border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 8px; padding: 5px 8px; font-size: 10.5px; font-weight: 700; cursor: pointer;
+    }
+    button.active { background: #2563eb; border-color: #60a5fa; box-shadow: 0 0 8px rgba(37, 99, 235, 0.55); }
+    button:active { transform: scale(0.95); }
+
+    /* Controles inferiores */
+    #controls-layer {
+      position: fixed; bottom: 14px; left: 14px; right: 14px;
+      display: flex; justify-content: space-between; align-items: flex-end;
+      pointer-events: none; z-index: 10;
+    }
+    .steer-area { pointer-events: auto; position: relative; width: 130px; height: 130px; }
+
+    /* Joystick Virtual */
+    #joystick-base {
+      width: 118px; height: 118px; border-radius: 50%;
+      background: rgba(15, 23, 42, 0.72); border: 2px solid rgba(96, 165, 250, 0.45);
+      position: relative; touch-action: none;
+    }
+    #joystick-knob {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: rgba(56, 189, 248, 0.85); border: 2px solid #fff;
+      position: absolute; top: 34px; left: 34px; pointer-events: none;
+    }
+
+    /* Flechas */
+    #arrows-pad {
+      display: none; grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(2, 42px); gap: 5px;
+    }
+    #arrows-pad button { width: 42px; height: 42px; font-size: 15px; border-radius: 10px; }
+
+    /* Giroscopio indicador */
+    #tilt-indicator {
+      display: none; padding: 12px; border-radius: 12px;
+      background: rgba(15, 23, 42, 0.82); border: 1px solid #38bdf8;
+      font-size: 11px; font-weight: 700; text-align: center;
+    }
+
+    /* Botones derechos: Armas + Pedales Acelerar/Frenar */
+    .right-controls { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: auto; }
+    .combat-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .combat-btns button { padding: 8px 11px; font-size: 11px; }
+    #btn-mg { background: rgba(185, 28, 28, 0.88); border-color: #f87171; }
+    #btn-flare { background: rgba(217, 119, 6, 0.9); border-color: #fbbf24; display: none; }
+
+    .pedals { display: flex; gap: 8px; }
+    .pedal-btn {
+      width: 78px; height: 54px; border-radius: 12px; font-size: 11px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #btn-brake { background: rgba(127, 29, 29, 0.85); border-color: #ef4444; }
+    #btn-gas { background: rgba(20, 83, 45, 0.88); border-color: #22c55e; }
+
+    /* Modal Game Over */
+    #gameover-screen {
+      display: none; position: fixed; inset: 0; background: rgba(5, 8, 15, 0.88);
+      backdrop-filter: blur(10px); z-index: 30;
+      flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 24px;
+    }
+    #gameover-screen h1 { font-size: 28px; color: #ef4444; margin-bottom: 10px; letter-spacing: 1px; }
+    #gameover-screen p { font-size: 15px; color: #e2e8f0; max-width: 360px; margin-bottom: 20px; }
+    #btn-retry { padding: 12px 22px; font-size: 14px; background: #2563eb; border-color: #60a5fa; }
+  </style>
 </head>
 <body>
-  <canvas id="game-canvas"></canvas>
-
-  <div id="hud">
-    <header class="top-bar">
-      <div class="brand">
-        <span class="live-dot" id="badge-status">PORTADA EN VIVO</span>
-        <h1>EXECUTIVE SHIELD</h1>
-      </div>
-      <div class="top-controls">
-        <span class="xp-pill" id="xp-display">LVL 1 • 0 XP</span>
-        <select id="lang-select" aria-label="Idioma">
-          <option value="es">🇪🇸 ES</option>
-          <option value="en">🇺🇸 EN</option>
-          <option value="ru">🇷🇺 RU</option>
-          <option value="pt">🇧🇷 PT</option>
-          <option value="fr">🇫🇷 FR</option>
-          <option value="zh">🇨🇳 ZH</option>
-        </select>
-      </div>
-    </header>
-
-    <section id="cover-panel" class="panel">
-      <p class="agency-tag" id="agency-label">UNITED STATES SECRET SERVICE • USSS</p>
-      <div class="leader-grid" id="leader-buttons"></div>
-      <div class="mode-row">
-        <button class="btn primary" id="btn-foot">🛡️ Escolta</button>
-        <button class="btn" id="btn-drive">🚘 Convoy</button>
-        <button class="btn" id="btn-heli">🚁 Helicóptero</button>
-        <button class="btn" id="btn-fly">✈️ Avión VIP</button>
-      </div>
-    </section>
-
-    <section id="mission-hud" class="hidden">
-      <div class="mission-box">
-        <div class="mission-meta">
-          <span id="mission-type-tag" class="tag">RUTINA</span>
-          <span id="vip-health">VIP: 100%</span>
+  <div id="hud-top">
+    <div class="panel">
+      <div class="title" id="vip-title">EE. UU. — Pres. Marcus Cole</div>
+      <div class="order-box" id="director-order">ORDEN: VIP a bordo. Mantente cerca del convoy y rompe el bloqueo enemigo.</div>
+      <div class="radio" id="radio-feed">RADIO [Central]: Perímetro despejado.</div>
+      <div class="bars">
+        <div class="bar-col">
+          <div class="bar-lbl" id="lbl-vip">VIP: 100%</div>
+          <div class="bar-wrap"><div id="vip-bar"></div></div>
         </div>
-        <h2 id="mission-title">Traslado Diplomático</h2>
-        <p id="mission-desc">Mantén el perímetro seguro.</p>
-        <div class="mission-actions">
-          <button class="btn small" id="btn-switch-gta">🔄 Cambiar Líder</button>
-          <button class="btn small hidden" id="btn-gyro">📱 Activar Inclinación</button>
-          <button class="btn small danger" id="btn-exit">✖ Portada</button>
+        <div class="bar-col">
+          <div class="bar-lbl" id="lbl-agent">AGENTE: 100%</div>
+          <div class="bar-wrap"><div id="agent-bar"></div></div>
         </div>
       </div>
+    </div>
 
-      <div id="joystick-zone">
-        <div id="joystick-stick"></div>
+    <div class="right-stack">
+      <div class="panel btn-group" id="fleet-selector">
+        <button data-mode="US" class="active">🇺🇸 EE. UU.</button>
+        <button data-mode="RU">🇷🇺 Rusia</button>
+        <button data-mode="CN">🇨🇳 China</button>
+        <button data-mode="SUMMIT">🌐 Cumbre ONU</button>
       </div>
-    </section>
-
-    <div id="decision-modal" class="modal hidden">
-      <div class="modal-card">
-        <span class="alert-badge" id="alert-title">⚠️ ALERTA DE SEGURIDAD</span>
-        <p id="alert-text"></p>
-        <div id="decision-options" class="decision-list"></div>
+      <div class="panel btn-group" id="vehicle-mode-selector">
+        <button data-vmode="GROUND" class="active" id="vmode-ground">🚘 Blindado</button>
+        <button data-vmode="HELI" id="vmode-heli">🚁 Helicóptero</button>
+        <button data-vmode="JET" id="vmode-jet">✈️ Avión</button>
+      </div>
+      <div class="panel btn-group" id="ctrl-selector">
+        <button data-ctrl="JOYSTICK" class="active" id="ctrl-joy">🕹️ Joystick</button>
+        <button data-ctrl="ARROWS" id="ctrl-arr">⬅️➡️ Flechas</button>
+        <button data-ctrl="TILT" id="ctrl-tilt">📱 Giroscopio</button>
+      </div>
+      <div class="panel btn-group" id="lang-selector">
+        <button data-lang="ES" class="active">ES</button>
+        <button data-lang="EN">EN</button>
+        <button data-lang="RU">RU</button>
+        <button data-lang="ZH">中文</button>
+        <button data-lang="FR">FR</button>
+        <button data-lang="AR">العربية</button>
       </div>
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="data.js"></script>
-  <script src="main.js"></script>
+  <div id="controls-layer">
+    <div class="steer-area">
+      <div id="joystick-base"><div id="joystick-knob"></div></div>
+      <div id="arrows-pad">
+        <div></div><button id="arr-up">▲</button><div></div>
+        <button id="arr-left">◀</button><button id="arr-down">▼</button><button id="arr-right">▶</button>
+      </div>
+      <div id="tilt-indicator">📱 ↔️</div>
+    </div>
+
+    <div class="right-controls">
+      <div class="combat-btns">
+        <button id="btn-support">📻 Pedir Apoyo</button>
+        <button id="btn-cqc">👊 CQC</button>
+        <button id="btn-mg">🔫 Metralletas</button>
+        <button id="btn-flare">✨ Bengalas</button>
+      </div>
+      <div class="combat-btns">
+        <button id="btn-siren">🚨 Sirenas: ON</button>
+        <button id="btn-cam">🎥 Cámara: Convoy</button>
+      </div>
+      <div class="pedals">
+        <button class="pedal-btn" id="btn-brake">FRENAR</button>
+        <button class="pedal-btn" id="btn-gas">ACELERAR</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameover-screen">
+    <h1 id="go-title">MISIÓN FALLIDA</h1>
+    <p id="go-reason">El Presidente ha sido asesinado durante la emboscada.</p>
+    <button id="btn-retry">↻ Reintentar Operación</button>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="./main.js"></script>
 </body>
 </html>
