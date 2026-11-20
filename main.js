@@ -1,561 +1,588 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { LANGUAGES, TRANSLATIONS } from './i18n.js';
-import { loadModelGLB, buildPresidentialHeli, buildPresidentialJet } from './models3d.js';
+import { sfx } from './audio.js';
+import {
+  NATION_SPECS,
+  buildHumanCharacter,
+  buildEscortMoto,
+  buildDetailedVehicle,
+  buildAircraft
+} from './models3d.js';
 
-// 1. ESCENA Y RENDERER
+// 1. RENDERER Y ESCENA DIURNA REALISTA (SIN QUEMAR EN BLANCO)
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x070b14);
-scene.fog = new THREE.FogExp2(0x070b14, 0.0046);
+scene.background = new THREE.Color(0x7dd3fc);
+scene.fog = new THREE.Fog(0xbae6fd, 90, 420);
 
-const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.5, 480);
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.5, 450);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.85;
+scene.add(new THREE.HemisphereLight(0xf0f9ff, 0x334155, 1.15));
+const sun = new THREE.DirectionalLight(0xfffbeb, 1.35);
+sun.position.set(60, 110, 40);
+sun.castShadow = true;
+scene.add(sun);
 
-scene.add(new THREE.HemisphereLight(0x93c5fd, 0x0f172a, 1.05));
-const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.9);
-dirLight.position.set(55, 95, 40);
-scene.add(dirLight);
+// 2. MUNDO: RESIDENCIA OFICIAL, CIUDAD, AUTOPISTA, HELIPUERTO Y AEROPUERTO
+const world = new THREE.Group();
+scene.add(world);
 
-// 2. CIUDAD Y AUTOPISTA
-function buildCity() {
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(1400, 1400),
-    new THREE.MeshStandardMaterial({ color: 0x0b101b, roughness: 0.88 })
+let palaceMesh = null;
+
+function buildWorld(nation = 'US') {
+  while (world.children.length > 0) world.remove(world.children[0]);
+  const spec = NATION_SPECS[nation];
+
+  // Césped y avenida
+  const grass = new THREE.Mesh(
+    new THREE.PlaneGeometry(1600, 2400),
+    new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 })
   );
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
+  grass.rotation.x = -Math.PI / 2;
+  grass.receiveShadow = true;
+  world.add(grass);
 
   const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(26, 1400),
-    new THREE.MeshStandardMaterial({ color: 0x182030, roughness: 0.42, metalness: 0.35 })
+    new THREE.PlaneGeometry(24, 2400),
+    new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.82 })
   );
   road.rotation.x = -Math.PI / 2;
-  road.position.y = 0.02;
-  scene.add(road);
+  road.position.y = 0.03;
+  road.receiveShadow = true;
+  world.add(road);
 
-  const lines = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(0.35, 6),
-    new THREE.MeshBasicMaterial({ color: 0xfacc15 }),
-    140
-  );
-  const dummy = new THREE.Object3D();
-  for (let i = 0; i < 140; i++) {
-    dummy.position.set(0, 0.04, -680 + i * 10);
-    dummy.rotation.set(-Math.PI / 2, 0, 0);
-    dummy.updateMatrix();
-    lines.setMatrixAt(i, dummy.matrix);
+  // Líneas amarillas de carril
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+  for (let z = -200; z <= 1400; z += 12) {
+    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 5), lineMat);
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(0, 0.05, z);
+    world.add(dash);
   }
-  scene.add(lines);
 
-  const buildings = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x162033, metalness: 0.78, roughness: 0.22 }),
-    260
+  // Residencia Oficial (Casa Blanca / Kremlin / Zhongnanhai) en z = -15
+  palaceMesh = new THREE.Group();
+  const mainHall = new THREE.Mesh(
+    new THREE.BoxGeometry(36, 12, 16),
+    new THREE.MeshStandardMaterial({ color: spec.palaceColor, roughness: 0.5 })
   );
-  let idx = 0;
-  for (let z = -620; z <= 620; z += 19) {
-    [-1, 1].forEach((side) => {
-      for (let row = 0; row < 2; row++) {
-        if (idx >= 260) return;
-        const w = 11 + ((idx * 7) % 8);
-        const d = 11 + ((idx * 13) % 8);
-        const h = 18 + ((idx * 17) % 60);
-        dummy.position.set(side * (23 + row * 18), h / 2, z);
-        dummy.scale.set(w, h, d);
-        dummy.updateMatrix();
-        buildings.setMatrixAt(idx++, dummy.matrix);
-      }
+  mainHall.position.set(0, 6, -18);
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(38, 1.5, 18),
+    new THREE.MeshStandardMaterial({ color: spec.roofColor, roughness: 0.4 })
+  );
+  roof.position.set(0, 12.7, -18);
+  palaceMesh.add(mainHall, roof);
+  world.add(palaceMesh);
+
+  // Edificios urbanos a ambos lados de la avenida
+  const bColors = [0x334155, 0x475569, 0x1e293b, 0x64748b];
+  for (let z = 30; z <= 950; z += 26) {
+    [-1, 1].forEach((side, sIdx) => {
+      const h = 20 + ((z + sIdx * 13) % 45);
+      const b = new THREE.Mesh(
+        new THREE.BoxGeometry(14, h, 14),
+        new THREE.MeshStandardMaterial({ color: bColors[(z + sIdx) % bColors.length], roughness: 0.55 })
+      );
+      b.position.set(side * 24, h / 2, z);
+      world.add(b);
     });
   }
-  scene.add(buildings);
-}
-buildCity();
 
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.65, 0.42, 0.75);
-composer.addPass(bloomPass);
+  // Helipuerto Táctico en z = 520
+  const helipad = new THREE.Mesh(
+    new THREE.CylinderGeometry(11, 11, 0.2, 24),
+    new THREE.MeshStandardMaterial({ color: 0x334155 })
+  );
+  helipad.position.set(0, 0.12, 520);
+  world.add(helipad);
 
-// 3. ESTADO DEL JUEGO
-let currentLang = 'ES';
-let currentNation = 'US';
-let vehicleMode = 'GROUND'; // GROUND | HELI | JET
-let controlScheme = 'JOYSTICK'; // JOYSTICK | ARROWS | TILT
-let sirensOn = true;
-let camMode = 0;
-let isGameOver = false;
-
-let vipHealth = 100;
-let agentHealth = 100;
-let outOfPerimeterTimer = 0;
-
-function t(key) {
-  return TRANSLATIONS[currentLang][key] || TRANSLATIONS.ES[key];
+  // Aeropuerto Internacional y Pista en z = 980
+  const runway = new THREE.Mesh(
+    new THREE.PlaneGeometry(36, 360),
+    new THREE.MeshStandardMaterial({ color: 0x0f172a })
+  );
+  runway.rotation.x = -Math.PI / 2;
+  runway.position.set(0, 0.06, 1080);
+  world.add(runway);
 }
 
-function updateBarsUI() {
-  document.getElementById('lbl-vip').textContent = `${t('vipLabel')}: ${Math.max(0, Math.round(vipHealth))}%`;
-  document.getElementById('lbl-agent').textContent = `${t('agentLabel')}: ${Math.max(0, Math.round(agentHealth))}%`;
-  document.getElementById('vip-bar').style.width = `${Math.max(0, vipHealth)}%`;
-  document.getElementById('agent-bar').style.width = `${Math.max(0, agentHealth)}%`;
+// 3. ESTADO DE CAMPAÑA (8 MISIONES)
+let lang = 'ES';
+let selectedNation = 'US';
+let controlMode = 'JOYSTICK';
+let missionStep = 1; // 1 a 8
+let playing = false;
+let vipHp = 100;
+let agentHp = 100;
+
+function t(k) {
+  return TRANSLATIONS[lang][k] || TRANSLATIONS.ES[k];
 }
 
-function triggerGameOver(reasonKey) {
-  if (isGameOver) return;
-  isGameOver = true;
-  document.getElementById('go-title').textContent = t('goTitle');
-  document.getElementById('go-reason').textContent = t(reasonKey);
-  document.getElementById('btn-retry').textContent = t('retryBtn');
-  document.getElementById('gameover-screen').style.display = 'flex';
+function setRadio(key) {
+  const msg = t(key);
+  document.getElementById('hud-radio').textContent = msg;
+  const meta = LANGUAGES.find((l) => l.code === lang);
+  sfx.speakRadio(msg, meta ? meta.voice : 'es-ES');
 }
 
-function applyLanguage(langCode) {
-  currentLang = langCode;
-  const meta = LANGUAGES.find((l) => l.code === langCode) || LANGUAGES[0];
-  document.documentElement.lang = langCode.toLowerCase();
+function setMission(num) {
+  missionStep = num;
+  document.getElementById('hud-mission').textContent = t(`m${num}`);
+}
+
+function updateHpUI() {
+  document.getElementById('val-vip').textContent = `${Math.max(0, Math.round(vipHp))}%`;
+  document.getElementById('val-agent').textContent = `${Math.max(0, Math.round(agentHp))}%`;
+  document.getElementById('vip-fill').style.width = `${Math.max(0, vipHp)}%`;
+  document.getElementById('agent-fill').style.width = `${Math.max(0, agentHp)}%`;
+}
+
+function endGame(win, reasonKey) {
+  playing = false;
+  document.getElementById('game-hud').style.display = 'none';
+  const scr = document.getElementById('end-screen');
+  const title = document.getElementById('end-title');
+  title.textContent = win ? t('winTitle') : t('goTitle');
+  title.style.color = win ? '#22c55e' : '#ef4444';
+  document.getElementById('end-desc').textContent = win ? t('winDesc') : t(reasonKey);
+  document.getElementById('btn-retry').textContent = t('retry');
+  scr.style.display = 'flex';
+}
+
+function applyTranslations() {
+  const meta = LANGUAGES.find((l) => l.code === lang) || LANGUAGES[0];
+  document.documentElement.lang = lang.toLowerCase();
   document.documentElement.dir = meta.dir;
 
-  const fBtns = document.querySelectorAll('#fleet-selector button');
-  fBtns[0].textContent = t('btnUS');
-  fBtns[1].textContent = t('btnRU');
-  fBtns[2].textContent = t('btnCN');
-  fBtns[3].textContent = t('btnSummit');
+  document.getElementById('txt-rotate').textContent = t('rotateMsg');
+  document.getElementById('txt-sub').textContent = t('subtitle');
+  document.getElementById('lbl-sec-nation').textContent = t('selectNation');
+  document.getElementById('lbl-sec-ctrl').textContent = t('selectCtrl');
+  document.getElementById('nat-us').textContent = t('usName');
+  document.getElementById('nat-ru').textContent = t('ruName');
+  document.getElementById('nat-cn').textContent = t('cnName');
+  document.getElementById('c-joy').textContent = t('ctrlJoy');
+  document.getElementById('c-arr').textContent = t('ctrlArr');
+  document.getElementById('c-tilt').textContent = t('ctrlTilt');
+  document.getElementById('btn-start').textContent = t('startBtn');
 
-  document.getElementById('vmode-ground').textContent = t('modeGround');
-  document.getElementById('vmode-heli').textContent = t('modeHeli');
-  document.getElementById('vmode-jet').textContent = t('modeJet');
-
-  document.getElementById('ctrl-joy').textContent = t('ctrlJoystick');
-  document.getElementById('ctrl-arr').textContent = t('ctrlArrows');
-  document.getElementById('ctrl-tilt').textContent = t('ctrlTilt');
-
-  document.getElementById('btn-gas').textContent = t('gasBtn');
-  document.getElementById('btn-brake').textContent = t('brakeBtn');
-  document.getElementById('btn-mg').textContent = t('mgBtn');
-  document.getElementById('btn-cqc').textContent = t('cqcBtn');
-  document.getElementById('btn-flare').textContent = t('flareBtn');
-  document.getElementById('btn-support').textContent = t('radioSupportBtn');
-  document.getElementById('btn-siren').textContent = sirensOn ? t('sirensOn') : t('sirensOff');
-  document.getElementById('btn-cam').textContent = `${t('camPrefix')}: ${t('camLabels')[camMode]}`;
-
-  const titleEl = document.getElementById('vip-title');
-  if (currentNation === 'US') titleEl.textContent = t('usLeader');
-  else if (currentNation === 'RU') titleEl.textContent = t('ruLeader');
-  else if (currentNation === 'CN') titleEl.textContent = t('cnLeader');
-  else titleEl.textContent = t('btnSummit');
-
-  document.getElementById('director-order').textContent =
-    vehicleMode === 'GROUND' ? t('orderDrive') : t('orderAir');
-  updateBarsUI();
+  document.getElementById('lbl-vip').textContent = t('vipLbl');
+  document.getElementById('lbl-agent').textContent = t('agentLbl');
+  document.getElementById('btn-gas').textContent = t('gas');
+  document.getElementById('btn-brake').textContent = t('brake');
+  document.getElementById('btn-shoot').textContent = t('actionShoot');
+  document.getElementById('btn-cqc').textContent = t('actionCqc');
+  document.getElementById('btn-board').textContent = t('actionBoard');
+  document.getElementById('btn-flare').textContent = t('actionFlare');
+  document.getElementById('btn-radio').textContent = t('actionRadio');
 }
 
-// 4. FLOTA, VEHÍCULO DEL JUGADOR Y EMBOSCADAS ENEMIGAS
-const worldGroup = new THREE.Group();
-scene.add(worldGroup);
+// 4. ACTORES EN ESCENA (AGENTES A PIE + CONVOY REAL CON MOTOS Y 2 LIMUSINAS + AERONAVES)
+const actors = new THREE.Group();
+scene.add(actors);
 
-let playerUnit = null;
-let vipUnit = null;
-let escortUnits = [];
-let enemies = [];
+let agentChar = null;
+let vipChar = null;
+let convoyGroup = null;
+let aircraft = null;
+let hostiles = [];
+let projectiles = [];
+let flares = [];
 
-function spawnEnemyAmbush() {
-  const enemy = loadModelGLB('suv.glb', 'RU', 'suv', 5.0);
-  const sideX = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 4);
-  const baseZ = (playerUnit ? playerUnit.position.z : 0) + 75 + Math.random() * 35;
-  enemy.position.set(sideX, 0, baseZ);
-  enemy.userData.hp = 40;
-  worldGroup.add(enemy);
-  enemies.push(enemy);
-}
+function setupOperation() {
+  while (actors.children.length > 0) actors.remove(actors.children[0]);
+  hostiles = [];
+  projectiles = [];
+  flares = [];
+  vipHp = 100;
+  agentHp = 100;
+  updateHpUI();
 
-function resetMission() {
-  isGameOver = false;
-  vipHealth = 100;
-  agentHealth = 100;
-  outOfPerimeterTimer = 0;
-  document.getElementById('gameover-screen').style.display = 'none';
+  buildWorld(selectedNation);
 
-  while (worldGroup.children.length > 0) worldGroup.remove(worldGroup.children[0]);
-  escortUnits = [];
-  enemies = [];
+  // Fase 1 y 2: Agente del Servicio Secreto y Presidente a pie frente a la residencia
+  agentChar = buildHumanCharacter({ role: 'agent', nation: selectedNation });
+  agentChar.position.set(0, 0, 2);
 
-  const prefix = currentNation === 'SUMMIT' ? 'us' : currentNation.toLowerCase();
+  vipChar = buildHumanCharacter({ role: 'vip', nation: selectedNation });
+  vipChar.position.set(-1.5, 0, -2);
 
-  if (vehicleMode === 'GROUND') {
-    vipUnit = loadModelGLB(`${prefix}_limo.glb`, currentNation === 'SUMMIT' ? 'US' : currentNation, 'limo', 6.5);
-    vipUnit.position.set(0, 0, 12);
+  // Caravana Presidencial Real estacionada lista para abordar (z = 16)
+  convoyGroup = new THREE.Group();
+  convoyGroup.position.set(0, 0, 16);
 
-    playerUnit = loadModelGLB('suv.glb', 'US', 'suv', 5.3);
-    playerUnit.position.set(0, 0, 2);
+  // 2 Motocicletas escolta al frente
+  const motoL = buildEscortMoto();
+  motoL.position.set(-2.4, 0, 14);
+  const motoR = buildEscortMoto();
+  motoR.position.set(2.4, 0, 14);
 
-    const ambu = loadModelGLB(`${prefix}_ambu.glb`, 'US', 'ambulance', 5.9);
-    ambu.position.set(-4.2, 0, -6);
+  // 2 Limusinas Presidenciales idénticas (La Bestia / Señuelo)
+  const limo1 = buildDetailedVehicle(selectedNation, 'limo');
+  limo1.position.set(0, 0, 6);
+  const limo2 = buildDetailedVehicle(selectedNation, 'limo');
+  limo2.position.set(0, 0, -2.5);
 
-    worldGroup.add(vipUnit, playerUnit, ambu);
-    escortUnits.push(vipUnit, playerUnit, ambu);
+  // SUVs blindados detrás + Ambulancia
+  const suv1 = buildDetailedVehicle(selectedNation, 'suv');
+  suv1.position.set(-2.5, 0, -10.5);
+  const ambu = buildDetailedVehicle(selectedNation, 'ambulance');
+  ambu.position.set(2.5, 0, -11);
 
-    document.getElementById('btn-flare').style.display = 'none';
-    document.getElementById('btn-mg').style.display = 'inline-block';
-  } else if (vehicleMode === 'HELI') {
-    playerUnit = buildPresidentialHeli(currentNation === 'SUMMIT' ? 'US' : currentNation);
-    playerUnit.position.set(0, 14, 0);
-    vipUnit = playerUnit; // Presidente a bordo del helicóptero
-    worldGroup.add(playerUnit);
+  convoyGroup.add(motoL, motoR, limo1, limo2, suv1, ambu);
+  convoyGroup.userData = { vehicles: [limo1, limo2, suv1, ambu], motos: [motoL, motoR] };
 
-    document.getElementById('btn-flare').style.display = 'inline-block';
-    document.getElementById('btn-mg').style.display = 'none';
-  } else {
-    playerUnit = buildPresidentialJet(currentNation === 'SUMMIT' ? 'US' : currentNation);
-    playerUnit.position.set(0, 26, 0);
-    vipUnit = playerUnit; // Presidente a bordo del avión presidencial
-    worldGroup.add(playerUnit);
+  actors.add(agentChar, vipChar, convoyGroup);
 
-    document.getElementById('btn-flare').style.display = 'inline-block';
-    document.getElementById('btn-mg').style.display = 'none';
+  // Atacantes de la emboscada inicial (Misión 1)
+  for (let i = 0; i < 4; i++) {
+    const enemy = buildHumanCharacter({ role: 'enemy' });
+    enemy.position.set(-8 + i * 5.2, 0, 10 + (i % 2) * 4);
+    enemy.userData.hp = 30;
+    actors.add(enemy);
+    hostiles.push(enemy);
   }
 
-  for (let i = 0; i < 3; i++) spawnEnemyAmbush();
-  applyLanguage(currentLang);
+  document.getElementById('btn-board').style.display = 'inline-block';
+  document.getElementById('btn-flare').style.display = 'none';
+  setMission(1);
+  setRadio('radioStart');
 }
 
-// 5. PARTÍCULAS (METRALLETAS DE LA BESTIA, BENGALAS AÉREAS, TURBINAS)
-const particles = [];
-const pGeo = new THREE.SphereGeometry(0.18, 6, 6);
+function boardPresidentialConvoy() {
+  if (missionStep > 2) return;
+  vipChar.visible = false;
+  agentChar.visible = false;
+  document.getElementById('btn-board').style.display = 'none';
+  setMission(3);
+  setRadio('radioBoarded');
 
-function spawnParticle({ pos, vel, color, scale = 1, life = 1, gravity = 0 }) {
-  const mesh = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }));
-  mesh.position.copy(pos);
-  mesh.scale.setScalar(scale);
-  scene.add(mesh);
-  particles.push({ mesh, vel, life, maxLife: life, gravity });
+  // Generar bloqueos enemigos en carretera (Misión 4)
+  for (let i = 0; i < 4; i++) {
+    const eCar = buildDetailedVehicle('RU', 'enemy');
+    eCar.position.set((i % 2 === 0 ? -4.5 : 4.5), 0, 220 + i * 65);
+    eCar.userData.hp = 40;
+    actors.add(eCar);
+    hostiles.push(eCar);
+  }
 }
 
-function fireArmoredMiniguns() {
-  if (!playerUnit || vehicleMode !== 'GROUND') return;
-  const origin = playerUnit.position.clone();
+function transitionToAircraft(kind) {
+  if (aircraft) actors.remove(aircraft);
+  convoyGroup.visible = false;
+  aircraft = buildAircraft(selectedNation, kind);
+  aircraft.position.set(0, kind === 'heli' ? 12 : 24, kind === 'heli' ? 530 : 980);
+  actors.add(aircraft);
+  document.getElementById('btn-flare').style.display = 'inline-block';
+}
 
-  // Ráfaga doble desde las metralletas ocultas del blindado
-  [-0.75, 0.75].forEach((offsetX) => {
-    spawnParticle({
-      pos: origin.clone().add(new THREE.Vector3(offsetX, 1.35, 2.8)),
-      vel: new THREE.Vector3(0, 0, 3.2),
-      color: 0xfef08a,
-      scale: 0.9,
-      life: 0.85
-    });
-    spawnParticle({
-      pos: origin.clone().add(new THREE.Vector3(offsetX, 1.35, 2.6)),
-      vel: new THREE.Vector3(0, 0.04, 0.2),
-      color: 0xf97316,
-      scale: 2.0,
-      life: 0.14
-    });
-  });
+// 5. ACCIONES DE COMBATE Y BENGALAS REALISTAS
+function fireWeapon() {
+  sfx.gunshot();
+  const origin =
+    missionStep <= 2 ? agentChar.position.clone().add(new THREE.Vector3(0, 1.2, 0.5)) :
+    missionStep <= 4 ? convoyGroup.position.clone().add(new THREE.Vector3(0, 1.4, 8)) :
+    aircraft.position.clone();
 
-  // Dañar enemigos delante del blindado
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const e = enemies[i];
-    if (Math.abs(e.position.x - origin.x) < 3.5 && e.position.z > origin.z && e.position.z - origin.z < 65) {
-      e.userData.hp -= 20;
-      if (e.userData.hp <= 0) {
-        worldGroup.remove(e);
-        enemies.splice(i, 1);
-        spawnEnemyAmbush();
+  const bullet = new THREE.Mesh(
+    new THREE.BoxGeometry(0.14, 0.14, 1.4),
+    new THREE.MeshBasicMaterial({ color: 0xfef08a })
+  );
+  bullet.position.copy(origin);
+  actors.add(bullet);
+  projectiles.push({ mesh: bullet, life: 1.1 });
+}
+
+function doCqcStrike() {
+  sfx.cqcHit();
+  if (missionStep <= 2) {
+    for (let i = hostiles.length - 1; i >= 0; i--) {
+      if (hostiles[i].position.distanceTo(agentChar.position) < 5.5) {
+        actors.remove(hostiles[i]);
+        hostiles.splice(i, 1);
       }
     }
+    if (hostiles.length === 0 && missionStep === 1) setMission(2);
   }
 }
 
-function triggerCQC() {
-  if (!playerUnit) return;
-  document.getElementById('radio-feed').textContent = t('radioCqc');
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const e = enemies[i];
-    if (e.position.distanceTo(playerUnit.position) < 12) {
-      worldGroup.remove(e);
-      enemies.splice(i, 1);
-      spawnEnemyAmbush();
-    }
-  }
-}
-
-function releaseAirFlares() {
-  if (!playerUnit || vehicleMode === 'GROUND') return;
-  document.getElementById('radio-feed').textContent = t('radioFlares');
-  const origin = playerUnit.position.clone();
-
-  for (let i = 0; i < 8; i++) {
+function deployRealisticFlares() {
+  if (!aircraft) return;
+  sfx.flareLaunch();
+  setRadio('radioFlare');
+  for (let i = 0; i < 10; i++) {
     const side = i % 2 === 0 ? 1 : -1;
-    spawnParticle({
-      pos: origin.clone().add(new THREE.Vector3(side * 1.2, -0.4, -1.5)),
-      vel: new THREE.Vector3(side * (0.25 + Math.random() * 0.2), -0.06, -0.22),
-      color: i % 2 === 0 ? 0xffedd5 : 0xf97316,
-      scale: 2.3,
-      life: 1.9,
-      gravity: -0.008
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xfff7ed })
+    );
+    core.position.copy(aircraft.position).add(new THREE.Vector3(side * 1.4, -0.4, -1.5));
+    actors.add(core);
+    flares.push({
+      mesh: core,
+      vel: new THREE.Vector3(side * (0.24 + Math.random() * 0.2), -0.04, -0.25),
+      life: 2.2
     });
   }
 }
 
-// 6. CONTROLES: JOYSTICK / FLECHAS / GIROSCOPIO + ACELERAR Y FRENAR
-const steerInput = { x: 0, y: 0, gas: false, brake: false };
-let speed = 0.45;
-let pitch = 0;
+// 6. CONTROLES (JOYSTICK / FLECHAS / GIROSCOPIO + ACELERAR / FRENAR)
+const ctrl = { x: 0, y: 0, gas: false, brake: false };
+let speed = 0;
 
-// Joystick táctil
-const joyBase = document.getElementById('joystick-base');
-const joyKnob = document.getElementById('joystick-knob');
-joyBase.addEventListener('touchmove', (e) => {
+const jBase = document.getElementById('joy-base');
+const jKnob = document.getElementById('joy-knob');
+jBase.addEventListener('touchmove', (e) => {
   e.preventDefault();
   const touch = e.touches[0];
-  const rect = joyBase.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const dx = THREE.MathUtils.clamp((touch.clientX - cx) / 42, -1, 1);
-  const dy = THREE.MathUtils.clamp((touch.clientY - cy) / 42, -1, 1);
-  steerInput.x = -dx;
-  steerInput.y = -dy;
-  joyKnob.style.transform = `translate(${dx * 32}px, ${dy * 32}px)`;
+  const r = jBase.getBoundingClientRect();
+  const dx = THREE.MathUtils.clamp((touch.clientX - (r.left + r.width / 2)) / 36, -1, 1);
+  const dy = THREE.MathUtils.clamp((touch.clientY - (r.top + r.height / 2)) / 36, -1, 1);
+  ctrl.x = -dx;
+  ctrl.y = -dy;
+  jKnob.style.transform = `translate(${dx * 28}px, ${dy * 28}px)`;
 });
-joyBase.addEventListener('touchend', () => {
-  steerInput.x = 0;
-  steerInput.y = 0;
-  joyKnob.style.transform = 'translate(0px, 0px)';
+jBase.addEventListener('touchend', () => {
+  ctrl.x = 0;
+  ctrl.y = 0;
+  jKnob.style.transform = 'translate(0,0)';
 });
 
-// Flechas
-function bindArrow(id, axis, val) {
+function bindBtn(id, fnDown, fnUp) {
   const el = document.getElementById(id);
-  el.addEventListener('touchstart', (e) => { e.preventDefault(); steerInput[axis] = val; });
-  el.addEventListener('touchend', (e) => { e.preventDefault(); steerInput[axis] = 0; });
-  el.addEventListener('mousedown', () => { steerInput[axis] = val; });
-  el.addEventListener('mouseup', () => { steerInput[axis] = 0; });
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); fnDown(); });
+  el.addEventListener('touchend', (e) => { e.preventDefault(); if (fnUp) fnUp(); });
+  el.addEventListener('mousedown', fnDown);
+  el.addEventListener('mouseup', () => { if (fnUp) fnUp(); });
 }
-bindArrow('arr-left', 'x', 1);
-bindArrow('arr-right', 'x', -1);
-bindArrow('arr-up', 'y', 1);
-bindArrow('arr-down', 'y', -1);
+bindBtn('a-left', () => (ctrl.x = 1), () => (ctrl.x = 0));
+bindBtn('a-right', () => (ctrl.x = -1), () => (ctrl.x = 0));
+bindBtn('a-up', () => (ctrl.y = 1), () => (ctrl.y = 0));
+bindBtn('a-down', () => (ctrl.y = -1), () => (ctrl.y = 0));
+bindBtn('btn-gas', () => (ctrl.gas = true), () => (ctrl.gas = false));
+bindBtn('btn-brake', () => (ctrl.brake = true), () => (ctrl.brake = false));
 
-// Giroscopio del teléfono
 window.addEventListener('deviceorientation', (e) => {
-  if (controlScheme !== 'TILT' || e.gamma === null) return;
-  steerInput.x = THREE.MathUtils.clamp(-e.gamma / 28, -1, 1);
-  if (e.beta !== null) {
-    steerInput.y = THREE.MathUtils.clamp((45 - e.beta) / 30, -1, 1);
-  }
+  if (controlMode !== 'TILT' || e.gamma === null) return;
+  ctrl.x = THREE.MathUtils.clamp(-e.gamma / 28, -1, 1);
+  if (e.beta !== null) ctrl.y = THREE.MathUtils.clamp((45 - e.beta) / 30, -1, 1);
 });
 
-function setControlScheme(scheme) {
-  controlScheme = scheme;
-  steerInput.x = 0;
-  steerInput.y = 0;
-  document.getElementById('joystick-base').style.display = scheme === 'JOYSTICK' ? 'block' : 'none';
-  document.getElementById('arrows-pad').style.display = scheme === 'ARROWS' ? 'grid' : 'none';
-  document.getElementById('tilt-indicator').style.display = scheme === 'TILT' ? 'block' : 'none';
+// Eventos de Portada
+document.querySelectorAll('#lang-bar button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#lang-bar button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    lang = b.dataset.lang;
+    applyTranslations();
+  });
+});
 
-  if (scheme === 'TILT' && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+document.querySelectorAll('#nation-bar button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#nation-bar button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    selectedNation = b.dataset.nat;
+  });
+});
+
+document.querySelectorAll('#ctrl-bar button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#ctrl-bar button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    controlMode = b.dataset.ctrl;
+  });
+});
+
+document.getElementById('btn-start').addEventListener('click', () => {
+  sfx.init();
+  document.getElementById('cover-screen').style.display = 'none';
+  document.getElementById('game-hud').style.display = 'block';
+
+  document.getElementById('joy-base').style.display = controlMode === 'JOYSTICK' ? 'block' : 'none';
+  document.getElementById('arr-pad').style.display = controlMode === 'ARROWS' ? 'grid' : 'none';
+  document.getElementById('tilt-box').style.display = controlMode === 'TILT' ? 'block' : 'none';
+
+  if (controlMode === 'TILT' && typeof DeviceOrientationEvent?.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission().catch(() => {});
   }
-}
 
-// Pedales Acelerar y Frenar
-const gasBtn = document.getElementById('btn-gas');
-const brakeBtn = document.getElementById('btn-brake');
-gasBtn.addEventListener('touchstart', (e) => { e.preventDefault(); steerInput.gas = true; });
-gasBtn.addEventListener('touchend', (e) => { e.preventDefault(); steerInput.gas = false; });
-gasBtn.addEventListener('mousedown', () => { steerInput.gas = true; });
-gasBtn.addEventListener('mouseup', () => { steerInput.gas = false; });
-
-brakeBtn.addEventListener('touchstart', (e) => { e.preventDefault(); steerInput.brake = true; });
-brakeBtn.addEventListener('touchend', (e) => { e.preventDefault(); steerInput.brake = false; });
-brakeBtn.addEventListener('mousedown', () => { steerInput.brake = true; });
-brakeBtn.addEventListener('mouseup', () => { steerInput.brake = false; });
-
-// Botones UI
-document.getElementById('btn-mg').addEventListener('click', fireArmoredMiniguns);
-document.getElementById('btn-cqc').addEventListener('click', triggerCQC);
-document.getElementById('btn-flare').addEventListener('click', releaseAirFlares);
-document.getElementById('btn-support').addEventListener('click', () => {
-  agentHealth = Math.min(100, agentHealth + 35);
-  vipHealth = Math.min(100, vipHealth + 25);
-  updateBarsUI();
-  document.getElementById('radio-feed').textContent = t('radioSupportSent');
+  setupOperation();
+  playing = true;
 });
 
-document.querySelectorAll('#fleet-selector button').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#fleet-selector button').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentNation = btn.dataset.mode;
-    resetMission();
-  });
+document.getElementById('btn-shoot').addEventListener('click', fireWeapon);
+document.getElementById('btn-cqc').addEventListener('click', doCqcStrike);
+document.getElementById('btn-board').addEventListener('click', boardPresidentialConvoy);
+document.getElementById('btn-flare').addEventListener('click', deployRealisticFlares);
+document.getElementById('btn-radio').addEventListener('click', () => {
+  agentHp = Math.min(100, agentHp + 30);
+  vipHp = Math.min(100, vipHp + 20);
+  updateHpUI();
+  setRadio('radioSupport');
 });
 
-document.querySelectorAll('#vehicle-mode-selector button').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#vehicle-mode-selector button').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    vehicleMode = btn.dataset.vmode;
-    resetMission();
-  });
+document.getElementById('btn-retry').addEventListener('click', () => {
+  document.getElementById('end-screen').style.display = 'none';
+  document.getElementById('cover-screen').style.display = 'flex';
 });
 
-document.querySelectorAll('#ctrl-selector button').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#ctrl-selector button').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    setControlScheme(btn.dataset.ctrl);
-  });
-});
+applyTranslations();
 
-document.querySelectorAll('#lang-selector button').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#lang-selector button').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    applyLanguage(btn.dataset.lang);
-  });
-});
-
-document.getElementById('btn-siren').addEventListener('click', (e) => {
-  sirensOn = !sirensOn;
-  e.target.textContent = sirensOn ? t('sirensOn') : t('sirensOff');
-});
-
-document.getElementById('btn-cam').addEventListener('click', (e) => {
-  camMode = (camMode + 1) % 3;
-  e.target.textContent = `${t('camPrefix')}: ${t('camLabels')[camMode]}`;
-});
-
-document.getElementById('btn-retry').addEventListener('click', resetMission);
-
-resetMission();
-
-// 7. BUCLE PRINCIPAL
+// 7. BUCLE PRINCIPAL DE JUEGO Y PROGRESIÓN DE LAS 8 MISIONES
 const clock = new THREE.Clock();
+let sirenTimer = 0;
 
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
-  const tNow = clock.getElapsedTime();
+  const elapsed = clock.getElapsedTime();
 
-  if (!isGameOver && playerUnit) {
-    // Acelerar y frenar
-    const maxSpd = vehicleMode === 'JET' ? 1.85 : vehicleMode === 'HELI' ? 1.15 : 1.1;
-    if (steerInput.gas) speed = Math.min(speed + 0.025, maxSpd);
-    else if (steerInput.brake) speed = Math.max(speed - 0.035, 0.05);
-    else speed = THREE.MathUtils.lerp(speed, 0.45, 0.02);
+  if (playing) {
+    // Misiones 1 y 2: Combate a pie del Servicio Secreto y escolta al blindado
+    if (missionStep <= 2) {
+      const moveZ = (ctrl.gas ? 0.16 : 0) + ctrl.y * 0.14;
+      const moveX = ctrl.x * 0.14;
+      agentChar.position.z += moveZ;
+      agentChar.position.x = THREE.MathUtils.clamp(agentChar.position.x + moveX, -11, 11);
 
-    // Movimiento horizontal y vertical (en aire)
-    playerUnit.position.z += speed;
-    playerUnit.position.x = THREE.MathUtils.clamp(playerUnit.position.x + steerInput.x * 0.35, -9.5, 9.5);
-    playerUnit.rotation.y = steerInput.x * 0.25;
-
-    if (vehicleMode !== 'GROUND') {
-      pitch = steerInput.y * 0.25;
-      playerUnit.rotation.x = -pitch;
-      playerUnit.position.y += steerInput.y * 0.28;
-
-      // Aterrizaje suave vs impacto fuerte
-      if (playerUnit.position.y <= 1.2) {
-        if (speed > 0.75 || steerInput.y < -0.65) {
-          triggerGameOver('goCrash');
-        } else {
-          playerUnit.position.y = 1.2;
-        }
+      // Animación de piernas al caminar
+      if (Math.abs(moveZ) + Math.abs(moveX) > 0.01) {
+        agentChar.userData.legL.rotation.x = Math.sin(elapsed * 12) * 0.5;
+        agentChar.userData.legR.rotation.x = -Math.sin(elapsed * 12) * 0.5;
       }
-      if (playerUnit.userData.mainRotor) playerUnit.userData.mainRotor.rotation.y += 0.45;
-      if (playerUnit.userData.tailRotor) playerUnit.userData.tailRotor.rotation.x += 0.5;
-    } else {
-      // Avance autónomo del VIP en carretera y verificación de perímetro
-      vipUnit.position.z += 0.46;
-      const distToVip = playerUnit.position.distanceTo(vipUnit.position);
-      if (distToVip > 26) {
-        outOfPerimeterTimer += dt;
-        if (outOfPerimeterTimer > 6) triggerGameOver('goPerimeter');
-      } else {
-        outOfPerimeterTimer = Math.max(0, outOfPerimeterTimer - dt);
-      }
+
+      // El Presidente sigue de cerca al agente
+      const targetVip = agentChar.position.clone().add(new THREE.Vector3(-1.3, 0, -1.2));
+      vipChar.position.lerp(targetVip, 0.06);
+
+      if (hostiles.length === 0 && missionStep === 1) setMission(2);
+
+      camera.position.lerp(new THREE.Vector3(agentChar.position.x, 4.8, agentChar.position.z - 8.5), 0.12);
+      camera.lookAt(agentChar.position.x, 1.3, agentChar.position.z + 4);
     }
 
-    // Emboscadas enemigas disparando
-    enemies.forEach((e) => {
-      e.position.z += 0.28;
-      if (e.position.z < playerUnit.position.z - 25) {
-        e.position.z = playerUnit.position.z + 90;
+    // Misiones 3, 4 y 5: Conducción de Caravana Presidencial (Motos + 2 Limusinas + SUVs)
+    else if (missionStep >= 3 && missionStep <= 5) {
+      if (ctrl.gas) speed = Math.min(speed + 0.025, 1.15);
+      else if (ctrl.brake) speed = Math.max(speed - 0.035, 0);
+      else speed = THREE.MathUtils.lerp(speed, 0.55, 0.02);
+
+      convoyGroup.position.z += speed;
+      convoyGroup.position.x = THREE.MathUtils.clamp(convoyGroup.position.x + ctrl.x * 0.28, -8.5, 8.5);
+
+      sirenTimer += dt;
+      if (sirenTimer > 0.45) {
+        sirenTimer = 0;
+        sfx.sirenPulse(Math.sin(elapsed * 8) > 0);
       }
-      if (Math.abs(e.position.z - playerUnit.position.z) < 28 && Math.random() < 0.03) {
-        // Fuego enemigo contra el agente o el VIP
-        if (vehicleMode === 'GROUND' && playerUnit.position.distanceTo(e.position) < vipUnit.position.distanceTo(e.position)) {
-          agentHealth -= 2.2;
-        } else {
-          vipHealth -= 1.8;
+
+      // Girar ruedas y parpadear sirenas
+      const flash = Math.sin(elapsed * 16) > 0;
+      convoyGroup.userData.vehicles.forEach((v) => {
+        v.userData.wheels.forEach((w) => (w.rotation.x += speed * 0.45));
+        v.userData.strobes[0].visible = flash;
+        v.userData.strobes[1].visible = !flash;
+      });
+
+      if (convoyGroup.position.z > 200 && missionStep === 3) setMission(4);
+      if (convoyGroup.position.z > 490 && missionStep === 4) setMission(5);
+      if (convoyGroup.position.z >= 525) {
+        setMission(6);
+        setRadio('radioHeli');
+        transitionToAircraft('heli');
+      }
+
+      camera.position.lerp(new THREE.Vector3(convoyGroup.position.x, 7.5, convoyGroup.position.z - 22), 0.1);
+      camera.lookAt(convoyGroup.position.x, 1.8, convoyGroup.position.z + 10);
+    }
+
+    // Misiones 6, 7 y 8: Vuelo en Helicóptero y Avión Presidencial hacia Cumbre ONU
+    else if (missionStep >= 6) {
+      const maxAir = missionStep === 6 ? 1.2 : 1.75;
+      if (ctrl.gas) speed = Math.min(speed + 0.03, maxAir);
+      else if (ctrl.brake) speed = Math.max(speed - 0.03, 0.25);
+      else speed = THREE.MathUtils.lerp(speed, 0.85, 0.02);
+
+      aircraft.position.z += speed;
+      aircraft.position.x = THREE.MathUtils.clamp(aircraft.position.x + ctrl.x * 0.35, -14, 14);
+      aircraft.position.y = Math.max(1.4, aircraft.position.y + ctrl.y * 0.25);
+
+      if (aircraft.userData.rotor) aircraft.userData.rotor.rotation.y += 0.45;
+
+      if (missionStep === 6 && aircraft.position.z >= 960) {
+        setMission(7);
+        setRadio('radioJet');
+        transitionToAircraft('jet');
+      }
+      if (missionStep === 7 && aircraft.position.z >= 1040) {
+        setMission(8);
+      }
+      if (missionStep === 8 && aircraft.position.z >= 1150) {
+        if (aircraft.position.y <= 3.5 && speed < 0.95) {
+          endGame(true);
+        } else if (aircraft.position.y <= 2.0) {
+          endGame(false, 'goCrash');
         }
-        updateBarsUI();
-        if (vipHealth <= 0) triggerGameOver('goVipKilled');
-        if (agentHealth <= 0) triggerGameOver('goAgentKia');
       }
-    });
 
-    // Ruedas y sirenas
-    const flash = Math.sin(tNow * 18) > 0;
-    escortUnits.forEach((u) => {
-      (u.userData.wheels || []).forEach((w) => { w.rotation.x += speed * 0.45; });
-      const strobes = u.userData.strobes || [];
-      if (strobes.length >= 2) {
-        strobes[0].visible = sirensOn ? flash : false;
-        strobes[1].visible = sirensOn ? !flash : false;
-      }
-    });
+      camera.position.lerp(new THREE.Vector3(aircraft.position.x, aircraft.position.y + 6.5, aircraft.position.z - 22), 0.1);
+      camera.lookAt(aircraft.position.x, aircraft.position.y, aircraft.position.z + 12);
+    }
 
-    // Partículas
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
+    // Proyectiles e impacto contra enemigos
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
       p.life -= dt;
-      if (p.life <= 0) {
-        scene.remove(p.mesh);
-        particles.splice(i, 1);
-        continue;
+      p.mesh.position.z += 2.6;
+      for (let j = hostiles.length - 1; j >= 0; j--) {
+        if (p.mesh.position.distanceTo(hostiles[j].position) < 3.2) {
+          actors.remove(hostiles[j]);
+          hostiles.splice(j, 1);
+          p.life = 0;
+        }
       }
-      p.vel.y += p.gravity;
-      p.mesh.position.add(p.vel);
-      p.mesh.material.opacity = Math.max(p.life / p.maxLife, 0);
+      if (p.life <= 0) {
+        actors.remove(p.mesh);
+        projectiles.splice(i, 1);
+      }
     }
 
-    // Cámara
-    const target = playerUnit.position;
-    if (camMode === 0) {
-      camera.position.lerp(new THREE.Vector3(target.x, target.y + 7.5, target.z - 19), 0.12);
-      camera.lookAt(target.x, target.y + 1.8, target.z + 12);
-    } else if (camMode === 1) {
-      camera.position.lerp(new THREE.Vector3(target.x + 14, target.y + 4.5, target.z + 4), 0.12);
-      camera.lookAt(target.x, target.y + 1.5, target.z + 2);
-    } else {
-      camera.position.lerp(new THREE.Vector3(target.x, target.y + 26, target.z - 24), 0.12);
-      camera.lookAt(target.x, target.y + 1, target.z + 6);
+    // Bengalas térmicas cayendo con humo
+    for (let i = flares.length - 1; i >= 0; i--) {
+      const f = flares[i];
+      f.life -= dt;
+      f.vel.y -= 0.005;
+      f.mesh.position.add(f.vel);
+      if (f.life <= 0) {
+        actors.remove(f.mesh);
+        flares.splice(i, 1);
+      }
+    }
+
+    // Fuego enemigo si quedan hostiles cerca
+    if (hostiles.length > 0 && Math.random() < 0.025) {
+      agentHp -= 1.5;
+      if (Math.random() < 0.4) vipHp -= 1.2;
+      updateHpUI();
+      if (vipHp <= 0) endGame(false, 'goVip');
+      if (agentHp <= 0) endGame(false, 'goAgent');
     }
   }
 
-  composer.render();
+  renderer.render(scene, camera);
 }
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
-  bloomPass.setSize(window.innerWidth, window.innerHeight);
 });
 
 animate();
