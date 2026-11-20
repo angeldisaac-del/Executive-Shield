@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const gltfLoader = new GLTFLoader();
 
 export const NATION_SPECS = {
   US: {
@@ -41,7 +44,6 @@ export function buildHumanCharacter({ role = 'agent', nation = 'US' } = {}) {
   const shirtColor = role === 'enemy' ? 0x7f1d1d : 0xf8fafc;
   const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.6 });
   const suitMat = new THREE.MeshStandardMaterial({ color: suitColor, roughness: 0.45, metalness: 0.15 });
-  const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor });
 
   // Piernas
   const legGeo = new THREE.BoxGeometry(0.22, 0.78, 0.22);
@@ -123,11 +125,12 @@ export function buildEscortMoto() {
 }
 
 /**
- * Vehículo Presidencial Detallado (Limusina con cabinas, parrilla cromada, banderas y ruedas)
+ * Vehículo Presidencial Detallado (Carga us_limo.glb para US Limo y usa geometría para el resto)
  */
 export function buildDetailedVehicle(nation = 'US', type = 'limo') {
   const spec = NATION_SPECS[nation] || NATION_SPECS.US;
   const car = new THREE.Group();
+  const fallbackGroup = new THREE.Group();
   const wheels = [];
 
   const isLimo = type === 'limo';
@@ -147,35 +150,35 @@ export function buildDetailedVehicle(nation = 'US', type = 'limo') {
   });
   const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.95, roughness: 0.15 });
 
-  // Chasis inferior
+  // Chasis inferior (respaldo)
   const chassis = new THREE.Mesh(new THREE.BoxGeometry(width, 0.85, length), paintMat);
   chassis.position.y = 0.78;
   chassis.castShadow = true;
-  car.add(chassis);
+  fallbackGroup.add(chassis);
 
-  // Cabina superior con cristales blindados
+  // Cabina superior
   const cabinLen = isLimo ? length * 0.62 : isAmbu ? length * 0.78 : length * 0.66;
   const cabinH = isAmbu ? 1.25 : 0.72;
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(width * 0.88, cabinH, cabinLen), glassMat);
   cabin.position.set(0, 1.18 + cabinH / 2, isAmbu ? -0.35 : -0.25);
-  car.add(cabin);
+  fallbackGroup.add(cabin);
 
   const roof = new THREE.Mesh(new THREE.BoxGeometry(width * 0.86, 0.1, cabinLen * 0.98), paintMat);
   roof.position.set(0, 1.2 + cabinH, isAmbu ? -0.35 : -0.25);
-  car.add(roof);
+  fallbackGroup.add(roof);
 
-  // Parrilla delantera y faros LED
+  // Parrilla y faros
   const grille = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.45, 0.1), chromeMat);
   grille.position.set(0, 0.78, length / 2 + 0.02);
-  car.add(grille);
+  fallbackGroup.add(grille);
 
   [-0.78, 0.78].forEach((hx) => {
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.08), new THREE.MeshBasicMaterial({ color: 0xfef9c3 }));
     hl.position.set(hx, 0.82, length / 2 + 0.03);
-    car.add(hl);
+    fallbackGroup.add(hl);
   });
 
-  // Banderas oficiales en el capó si es limusina
+  // Banderas en el capó
   if (isLimo) {
     [-0.95, 0.95].forEach((fx, idx) => {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.65), chromeMat);
@@ -185,7 +188,7 @@ export function buildDetailedVehicle(nation = 'US', type = 'limo') {
         new THREE.MeshBasicMaterial({ color: idx === 0 ? spec.flagA : spec.flagB })
       );
       flag.position.set(fx, 1.52, length * 0.36 - 0.18);
-      car.add(pole, flag);
+      fallbackGroup.add(pole, flag);
     });
   }
 
@@ -196,10 +199,10 @@ export function buildDetailedVehicle(nation = 'US', type = 'limo') {
       new THREE.MeshBasicMaterial({ color: 0xdc2626 })
     );
     stripe.position.y = 0.95;
-    car.add(stripe);
+    fallbackGroup.add(stripe);
   }
 
-  // Ruedas con rines cromados
+  // Ruedas
   const tireGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.32, 16);
   tireGeo.rotateZ(Math.PI / 2);
   const rimGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.34, 12);
@@ -215,16 +218,70 @@ export function buildDetailedVehicle(nation = 'US', type = 'limo') {
     const w = new THREE.Group();
     w.add(new THREE.Mesh(tireGeo, tireMat), new THREE.Mesh(rimGeo, chromeMat));
     w.position.set(x, y, z);
-    car.add(w);
+    fallbackGroup.add(w);
     wheels.push(w);
   });
 
-  // Estrobos
+  car.add(fallbackGroup);
+
+  // Estrobos policiales (se mantienen activos encima de ambos modelos)
   const sB = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.12, 0.08), new THREE.MeshBasicMaterial({ color: 0x3b82f6 }));
   sB.position.set(-0.4, 1.25, length * 0.28);
   const sR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.12, 0.08), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
   sR.position.set(0.4, 1.25, length * 0.28);
   car.add(sB, sR);
+
+  // Cargar modelo 3D real us_limo.glb si es la limusina de Estados Unidos
+  if (nation === 'US' && isLimo) {
+    gltfLoader.load(
+      './us_limo.glb',
+      (gltf) => {
+        const model = gltf.scene;
+
+        // Calcular dimensiones reales del GLB para escalarlo a 6.8 unidades de largo
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxHorizontal = Math.max(size.x, size.z);
+
+        if (maxHorizontal > 0) {
+          const targetScale = length / maxHorizontal;
+          model.scale.setScalar(targetScale);
+        }
+
+        // Si el modelo viene orientado en el eje X en vez del Z, rotarlo 90 grados
+        if (size.x > size.z) {
+          model.rotation.y = Math.PI / 2;
+        }
+
+        // Recalcular caja tras escalar/rotar para apoyarlo exactamente en el suelo (y = 0) y centrarlo
+        const scaledBox = new THREE.Box3().setFromObject(model);
+        const center = scaledBox.getCenter(new THREE.Vector3());
+        model.position.x -= center.x;
+        model.position.z -= center.z;
+        model.position.y -= scaledBox.min.y;
+
+        // Activar sombras y mejorar respuesta a la luz en materiales oscuros
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            if (child.material) {
+              child.material.roughness = 0.45;
+              child.material.metalness = 0.25;
+            }
+          }
+        });
+
+        // Ocultar las cajas geométricas y mostrar la limusina 3D
+        fallbackGroup.visible = false;
+        car.add(model);
+      },
+      undefined,
+      (err) => {
+        console.error('Error cargando us_limo.glb (se mantiene modelo de respaldo):', err);
+      }
+    );
+  }
 
   car.userData = { wheels, strobes: [sB, sR], type };
   return car;
